@@ -170,12 +170,15 @@ class OrderBookTracker(ABC):
                 self.logger().network("Unexpected error while fetching last trade price.", exc_info=True)
                 await asyncio.sleep(30)
 
+    async def _initial_order_book_for_trading_pair(self, trading_pair: str) -> OrderBook:
+        return await self._data_source.get_new_order_book(trading_pair)
+
     async def _init_order_books(self):
         """
         Initialize order books
         """
         for index, trading_pair in enumerate(self._trading_pairs):
-            self._order_books[trading_pair] = await self._data_source.get_new_order_book(trading_pair)
+            self._order_books[trading_pair] = await self._initial_order_book_for_trading_pair(trading_pair)
             self._tracking_message_queues[trading_pair] = asyncio.Queue()
             self._tracking_tasks[trading_pair] = safe_ensure_future(self._track_single_book(trading_pair))
             self.logger().info(f"Initialized order book for {trading_pair}. "
@@ -264,14 +267,13 @@ class OrderBookTracker(ABC):
                     # Output some statistics periodically.
                     now: float = time.time()
                     if int(now / 60.0) > int(last_message_timestamp / 60.0):
-                        self.logger().debug("Processed %d order book diffs for %s.",
-                                            diff_messages_accepted, trading_pair)
+                        self.logger().debug(f"Processed {diff_messages_accepted} order book diffs for {trading_pair}.")
                         diff_messages_accepted = 0
                     last_message_timestamp = now
                 elif message.type is OrderBookMessageType.SNAPSHOT:
                     past_diffs: List[OrderBookMessage] = list(past_diffs_window)
                     order_book.restore_from_snapshot_and_diffs(message, past_diffs)
-                    self.logger().debug("Processed order book snapshot for %s.", trading_pair)
+                    self.logger().debug(f"Processed order book snapshot for {trading_pair}.")
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -307,9 +309,7 @@ class OrderBookTracker(ABC):
                 # Log some statistics.
                 now: float = time.time()
                 if int(now / 60.0) > int(last_message_timestamp / 60.0):
-                    self.logger().debug("Trade messages processed: %d, rejected: %d",
-                                        messages_accepted,
-                                        messages_rejected)
+                    self.logger().debug(f"Trade messages processed: {messages_accepted}, rejected: {messages_rejected}")
                     messages_accepted = 0
                     messages_rejected = 0
 

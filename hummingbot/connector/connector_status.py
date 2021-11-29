@@ -1,39 +1,49 @@
 #!/usr/bin/env python
 
 connector_status = {
+    'ascend_ex': 'yellow',
     'balancer': 'green',
-    'beaxy': 'yellow',
+    'beaxy': 'green',
     'binance': 'green',
     'binance_perpetual': 'green',
-    'binance_perpetual_testnet': 'green',
-    'binance_us': 'yellow',
+    'binance_perpetual_testnet': 'yellow',
+    'binance_us': 'green',
     'bitfinex': 'yellow',
-    'bitmax': 'green',
+    'bitmart': 'green',
     'bittrex': 'yellow',
-    'blocktane': 'green',
-    'celo': 'green',
-    'coinbase_pro': 'green',
-    'crypto_com': 'yellow',
+    'blocktane': 'yellow',
+    'bybit_perpetual': 'green',
+    'bybit_perpetual_testnet': 'yellow',
+    'celo': 'yellow',
+    'coinbase_pro': 'yellow',
+    'coinzoom': 'yellow',
+    'crypto_com': 'green',
+    'digifinex': "yellow",
     'dydx': 'green',
-    'eterbase': 'red',
+    'dydx_perpetual': 'yellow',
     'ethereum': 'red',
-    'hitbtc': 'yellow',
+    'ftx': 'green',
+    'gate_io': 'yellow',
+    'hitbtc': 'green',
     'huobi': 'green',
     'kraken': 'green',
-    'kucoin': 'green',
-    'liquid': 'green',
+    'kucoin': 'yellow',
+    'k2': 'red',
+    'liquid': 'yellow',
     'loopring': 'yellow',
     'mandala': 'green',
-    'okex': 'green',
+    'ndax': 'yellow',
+    'ndax_testnet': 'yellow',
+    'okex': 'yellow',
     'perpetual_finance': 'yellow',
     'probit': 'yellow',
     'probit_kr': 'yellow',
     'terra': 'green',
-    'uniswap': 'green'
+    'uniswap': 'yellow',
+    'uniswap_v3': 'yellow'
 }
 
 warning_messages = {
-    'eterbase': 'Hack investigation and security audit is ongoing for Eterbase. Trading is currently disabled.'
 }
 
 

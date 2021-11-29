@@ -11,16 +11,6 @@ from dataclasses import dataclass
 from hummingbot.core.data_type.order_book_row import OrderBookRow
 
 
-class WalletEvent(Enum):
-    ReceivedAsset = 5
-    BalanceChanged = 6
-    WrappedEth = 7
-    UnwrappedEth = 8
-    GasUsed = 9
-    TokenApproved = 10
-    TransactionFailure = 99
-
-
 class MarketEvent(Enum):
     ReceivedAsset = 101
     BuyOrderCompleted = 102
@@ -35,32 +25,21 @@ class MarketEvent(Enum):
     BuyOrderCreated = 200
     SellOrderCreated = 201
     FundingPaymentCompleted = 202
-
-
-class NewBlocksWatcherEvent(Enum):
-    NewBlocks = 401
-
-
-class IncomingEthWatcherEvent(Enum):
-    ReceivedEther = 501
-
-
-class ERC20WatcherEvent(Enum):
-    ReceivedToken = 601
-    ApprovedToken = 602
+    RangePositionInitiated = 300
+    RangePositionCreated = 301
+    RangePositionRemoved = 302
+    RangePositionUpdated = 303
+    RangePositionFailure = 304
 
 
 class OrderBookEvent(Enum):
     TradeEvent = 901
 
 
-class ZeroExEvent(Enum):
-    Fill = 1001
-
-
 class TradeType(Enum):
     BUY = 1
     SELL = 2
+    RANGE = 3
 
 
 class OrderType(Enum):
@@ -90,6 +69,14 @@ class PositionMode(Enum):
     ONEWAY = False
 
 
+class FundingInfo(NamedTuple):
+    trading_pair: str
+    index_price: Decimal
+    mark_price: Decimal
+    next_funding_utc_timestamp: int
+    rate: Decimal
+
+
 class PriceType(Enum):
     MidPrice = 1
     BestBid = 2
@@ -97,6 +84,7 @@ class PriceType(Enum):
     LastTrade = 4
     LastOwnTrade = 5
     InventoryCost = 6
+    Custom = 7
 
 
 class MarketTransactionFailureEvent(NamedTuple):
@@ -108,60 +96,6 @@ class MarketOrderFailureEvent(NamedTuple):
     timestamp: float
     order_id: str
     order_type: OrderType
-
-
-class WalletReceivedAssetEvent(NamedTuple):
-    timestamp: float
-    tx_hash: str
-    from_address: str
-    to_address: str
-    asset_name: str
-    amount_received: Decimal
-    raw_amount_received: int
-
-
-class WalletWrappedEthEvent(NamedTuple):
-    timestamp: float
-    tx_hash: str
-    address: str
-    amount: Decimal
-    raw_amount: int
-
-
-class WalletUnwrappedEthEvent(NamedTuple):
-    timestamp: float
-    tx_hash: str
-    address: str
-    amount: Decimal
-    raw_amount: int
-
-
-class ZeroExFillEvent(NamedTuple):
-    timestamp: float
-    tx_hash: str
-    maker_address: str
-    fee_recipient_address: str
-    maker_asset_data: bytes
-    taker_asset_data: bytes
-    maker_fee_asset_data: bytes
-    taker_fee_asset_data: bytes
-    order_hash: str
-    taker_address: str
-    sender_address: str
-    maker_asset_filled_amount: Decimal
-    taker_asset_filled_amount: Decimal
-    maker_fee_paid: Decimal
-    taker_fee_paid: Decimal
-    protocol_fee_paid: Decimal
-
-
-class MarketReceivedAssetEvent(NamedTuple):
-    timestamp: float
-    tx_hash: str
-    from_address: str
-    to_address: str
-    asset_name: str
-    amount_received: float
 
 
 @dataclass
@@ -211,35 +145,6 @@ class FundingPaymentCompletedEvent:
     trading_pair: str
     amount: Decimal
     funding_rate: Decimal
-
-
-class MarketWithdrawAssetEvent(NamedTuple):
-    timestamp: float
-    tracking_id: str
-    to_address: str
-    asset_name: str
-    amount: Decimal
-    fee_amount: Decimal
-
-
-class EthereumGasUsedEvent(NamedTuple):
-    timestamp: float
-    tx_hash: str
-    gas_price_gwei: float
-    gas_price_raw: int
-    gas_used: int
-    eth_amount: float
-    eth_amount_raw: int
-
-
-class TokenApprovedEvent(NamedTuple):
-    timestamp: float
-    tx_hash: str
-    owner_address: str
-    spender_address: str
-    asset_name: str
-    amount: float
-    raw_amount: int
 
 
 class TradeFeeType(Enum):
@@ -366,3 +271,68 @@ class SellOrderCreatedEvent:
     exchange_order_id: Optional[str] = None
     leverage: Optional[int] = 1
     position: Optional[str] = "NILL"
+
+
+@dataclass
+class RangePositionInitiatedEvent:
+    timestamp: float
+    hb_id: str
+    tx_hash: str
+    trading_pair: str
+    fee_tier: str
+    lower_price: Decimal
+    upper_price: Decimal
+    base_amount: Decimal
+    quote_amount: Decimal
+    status: str
+    gas_price: Decimal
+
+
+@dataclass
+class RangePositionCreatedEvent:
+    timestamp: float
+    hb_id: str
+    tx_hash: str
+    token_id: str
+    trading_pair: str
+    fee_tier: str
+    lower_price: Decimal
+    upper_price: Decimal
+    base_amount: Decimal
+    quote_amount: Decimal
+    status: str
+    gas_price: Decimal
+
+
+@dataclass
+class RangePositionUpdatedEvent:
+    timestamp: float
+    hb_id: str
+    tx_hash: str
+    token_id: str
+    base_amount: Decimal
+    quote_amount: Decimal
+    status: str
+
+
+@dataclass
+class RangePositionRemovedEvent:
+    timestamp: float
+    hb_id: str
+    token_id: Optional[str] = None
+
+
+@dataclass
+class RangePositionFailureEvent:
+    timestamp: float
+    hb_id: str
+
+
+class LimitOrderStatus(Enum):
+    UNKNOWN = 0
+    NEW = 1
+    OPEN = 2
+    CANCELING = 3
+    CANCELED = 4
+    COMPLETED = 5
+    FAILED = 6

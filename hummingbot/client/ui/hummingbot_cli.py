@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import asyncio
-from typing import Callable
+from typing import Callable, Optional
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.application import Application
 from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
@@ -12,6 +12,7 @@ from prompt_toolkit.completion import Completer
 from hummingbot.client.ui.layout import (
     create_input_field,
     create_log_field,
+    create_log_toggle,
     create_output_field,
     create_search_field,
     generate_layout,
@@ -43,10 +44,11 @@ class HummingbotCLI:
         self.input_field = create_input_field(completer=completer)
         self.output_field = create_output_field()
         self.log_field = create_log_field(self.search_field)
+        self.log_toggle = create_log_toggle(self.toggle_logs)
         self.timer = create_timer()
         self.process_usage = create_process_monitor()
         self.trade_monitor = create_trade_monitor()
-        self.layout = generate_layout(self.input_field, self.output_field, self.log_field, self.search_field, self.timer, self.process_usage, self.trade_monitor)
+        self.layout, self.layout_components = generate_layout(self.input_field, self.output_field, self.log_field, self.log_toggle, self.search_field, self.timer, self.process_usage, self.trade_monitor)
         # add self.to_stop_config to know if cancel is triggered
         self.to_stop_config: bool = False
 
@@ -54,8 +56,7 @@ class HummingbotCLI:
         self.bindings = bindings
         self.input_handler = input_handler
         self.input_field.accept_handler = self.accept
-        self.app = Application(layout=self.layout, full_screen=True, key_bindings=self.bindings, style=load_style(),
-                               mouse_support=True, clipboard=PyperclipClipboard())
+        self.app: Optional[Application] = None
 
         # settings
         self.prompt_text = ">>> "
@@ -70,6 +71,8 @@ class HummingbotCLI:
         loop.create_task(start_trade_monitor(self.trade_monitor))
 
     async def run(self):
+        self.app = Application(layout=self.layout, full_screen=True, key_bindings=self.bindings, style=load_style(),
+                               mouse_support=True, clipboard=PyperclipClipboard())
         await self.app.run_async()
 
     def accept(self, buff):
@@ -132,6 +135,14 @@ class HummingbotCLI:
 
     def toggle_hide_input(self):
         self.hide_input = not self.hide_input
+
+    def toggle_logs(self):
+        if self.layout_components["pane_right"].width is None:
+            self.layout_components["pane_right"].width = 0
+            self.layout_components["item_top_toggle"].text = '< log pane'
+        else:
+            self.layout_components["pane_right"].width = None
+            self.layout_components["item_top_toggle"].text = '> log pane'
 
     def exit(self):
         self.app.exit()

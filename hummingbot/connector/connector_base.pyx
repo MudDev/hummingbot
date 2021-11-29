@@ -31,11 +31,18 @@ cdef class ConnectorBase(NetworkIterator):
         MarketEvent.SellOrderCompleted,
         MarketEvent.WithdrawAsset,
         MarketEvent.OrderCancelled,
-        MarketEvent.TransactionFailure,
         MarketEvent.OrderFilled,
+        MarketEvent.OrderExpired,
+        MarketEvent.OrderFailure,
+        MarketEvent.TransactionFailure,
         MarketEvent.BuyOrderCreated,
         MarketEvent.SellOrderCreated,
-        MarketEvent.OrderExpired
+        MarketEvent.FundingPaymentCompleted,
+        MarketEvent.RangePositionCreated,
+        MarketEvent.RangePositionRemoved,
+        MarketEvent.RangePositionUpdated,
+        MarketEvent.RangePositionFailure,
+        MarketEvent.RangePositionInitiated,
     ]
 
     def __init__(self):
@@ -374,7 +381,7 @@ cdef class ConnectorBase(NetworkIterator):
         if price.is_nan():
             return price
         price_quantum = self.c_get_order_price_quantum(trading_pair, price)
-        return round(price / price_quantum) * price_quantum
+        return (price // price_quantum) * price_quantum
 
     def quantize_order_price(self, trading_pair: str, price: Decimal) -> Decimal:
         """

@@ -1,3 +1,5 @@
+import asyncio
+
 import pandas as pd
 import time
 from collections import (
@@ -11,14 +13,13 @@ from hummingbot.logger.application_warning import ApplicationWarning
 from hummingbot.connector.connector_base import ConnectorBase
 from hummingbot.core.network_iterator import NetworkStatus
 from hummingbot.client.config.global_config_map import global_config_map
-from hummingbot.core.utils.ethereum import check_web3
 from hummingbot.client.config.config_helpers import (
     missing_required_configs,
     get_strategy_config_map
 )
 from hummingbot.client.config.security import Security
 from hummingbot.user.user_balances import UserBalances
-from hummingbot.client.settings import required_exchanges, ethereum_wallet_required, ethereum_gas_station_required
+from hummingbot.client.settings import required_exchanges, ethereum_wallet_required
 from hummingbot.core.utils.async_utils import safe_ensure_future
 
 from typing import TYPE_CHECKING
@@ -68,7 +69,7 @@ class StatusCommand:
 
         return "\n".join(lines)
 
-    async def strategy_status(self):
+    async def strategy_status(self, live: bool = False):
         paper_trade = "\n  Paper Trading ON: All orders are simulated, and no real orders are placed." if global_config_map.get("paper_trade_enabled").value \
             else ""
         app_warning = self.application_warning()
@@ -78,7 +79,7 @@ class StatusCommand:
         else:
             st_status = self.strategy.format_status()
         status = paper_trade + "\n" + st_status + "\n" + app_warning
-        if self._script_iterator is not None:
+        if self._script_iterator is not None and live is False:
             self._script_iterator.request_status()
         return status
 
@@ -124,11 +125,11 @@ class StatusCommand:
             if live:
                 await self.stop_live_update()
                 self.app.live_updates = True
-                while self.app.live_updates:
+                while self.app.live_updates and self.strategy:
                     script_status = '\n Status from script would not appear here. ' \
                                     'Simply run the status command without "--live" to see script status.'
                     await self.cls_display_delay(
-                        await self.strategy_status() + script_status + "\n\n Press escape key to stop update.", 1
+                        await self.strategy_status(live=True) + script_status + "\n\n Press escape key to stop update.", 1
                     )
                 self._notify("Stopped live status display update.")
             else:
@@ -145,7 +146,12 @@ class StatusCommand:
             self._notify('  - Security check: Encrypted files are being processed. Please wait and try again later.')
             return False
 
-        invalid_conns = await self.validate_required_connections()
+        network_timeout = float(global_config_map["other_commands_timeout"].value)
+        try:
+            invalid_conns = await asyncio.wait_for(self.validate_required_connections(), network_timeout)
+        except asyncio.TimeoutError:
+            self._notify("\nA network error prevented the connection check to complete. See logs for more details.")
+            raise
         if invalid_conns:
             self._notify('  - Exchange check: Invalid connections:')
             for ex, err_msg in invalid_conns.items():
@@ -162,33 +168,6 @@ class StatusCommand:
             self._notify('  - Strategy check: All required parameters confirmed.')
         if invalid_conns or missing_configs:
             return False
-
-        if self.wallet is not None:
-            # Only check node url when a wallet has been initialized
-            eth_node_valid = check_web3(global_config_map.get("ethereum_rpc_url").value)
-            if not eth_node_valid:
-                self._notify('  - Node check: Bad ethereum rpc url. '
-                             'Please re-configure by entering "config ethereum_rpc_url"')
-                return False
-            elif notify_success:
-                self._notify("  - Node check: Ethereum node running and current.")
-
-            if self.wallet.network_status is NetworkStatus.CONNECTED:
-                if self._trading_required:
-                    has_minimum_eth = self.wallet.get_balance("ETH") > 0.01
-                    if not has_minimum_eth:
-                        self._notify("  - ETH wallet check: Not enough ETH in wallet. "
-                                     "A small amount of Ether is required for sending transactions on "
-                                     "Decentralized Exchanges")
-                        return False
-                    elif notify_success:
-                        self._notify("  - ETH wallet check: Minimum ETH requirement satisfied")
-            else:
-                self._notify("  - ETH wallet check: ETH wallet is not connected.")
-
-        if ethereum_gas_station_required() and not global_config_map["ethgasstation_gas_enabled"].value:
-            self._notify(f'  - ETH gas station check: Manual gas price is fixed at '
-                         f'{global_config_map["manual_gas_price"].value}.')
 
         loading_markets: List[ConnectorBase] = []
         for market in self.markets.values():

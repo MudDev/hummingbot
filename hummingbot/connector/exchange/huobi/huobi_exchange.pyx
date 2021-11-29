@@ -1,11 +1,9 @@
 import aiohttp
-from aiohttp.test_utils import TestClient
 import asyncio
 from decimal import Decimal
 from libc.stdint cimport int64_t
 import logging
 import time
-import pandas as pd
 from typing import (
     Any,
     AsyncIterable,
@@ -52,7 +50,8 @@ from hummingbot.connector.exchange.huobi.huobi_in_flight_order import HuobiInFli
 from hummingbot.connector.exchange.huobi.huobi_order_book_tracker import HuobiOrderBookTracker
 from hummingbot.connector.exchange.huobi.huobi_utils import (
     convert_to_exchange_trading_pair,
-    convert_from_exchange_trading_pair)
+    convert_from_exchange_trading_pair,
+    get_new_client_order_id)
 from hummingbot.connector.trading_rule cimport TradingRule
 from hummingbot.connector.exchange_base import ExchangeBase
 from hummingbot.connector.exchange.huobi.huobi_user_stream_tracker import HuobiUserStreamTracker
@@ -182,9 +181,6 @@ cdef class HuobiExchange(ExchangeBase):
     def shared_client(self, client: aiohttp.ClientSession):
         self._shared_client = client
 
-    async def get_active_exchange_markets(self) -> pd.DataFrame:
-        return await HuobiAPIOrderBookDataSource.get_active_exchange_markets()
-
     cdef c_start(self, Clock clock, double timestamp):
         self._tx_tracker.c_start(clock, timestamp)
         ExchangeBase.c_start(self, clock, timestamp)
@@ -263,39 +259,36 @@ cdef class HuobiExchange(ExchangeBase):
         if is_auth_required:
             params = self._huobi_auth.add_auth_to_params(method, path_url, params)
 
-        # aiohttp TestClient requires path instead of url
-        if isinstance(client, TestClient):
-            response_coro = client.request(
+        if not data:
+            response = await client.request(
                 method=method.upper(),
-                path=f"{path_url}",
+                url=url,
                 headers=headers,
                 params=params,
-                data=ujson.dumps(data),
-                timeout=100
+                timeout=self.API_CALL_TIMEOUT
             )
         else:
-            response_coro = client.request(
+            response = await client.request(
                 method=method.upper(),
                 url=url,
                 headers=headers,
                 params=params,
                 data=ujson.dumps(data),
-                timeout=100
+                timeout=self.API_CALL_TIMEOUT
             )
 
-        async with response_coro as response:
-            if response.status != 200:
-                raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}.")
-            try:
-                parsed_response = await response.json()
-            except Exception:
-                raise IOError(f"Error parsing data from {url}.")
+        if response.status != 200:
+            raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}.")
+        try:
+            parsed_response = await response.json()
+        except Exception:
+            raise IOError(f"Error parsing data from {url}.")
 
-            data = parsed_response.get("data")
-            if data is None:
-                self.logger().error(f"Error received from {url}. Response is {parsed_response}.")
-                raise HuobiAPIError({"error": parsed_response})
-            return data
+        data = parsed_response.get("data")
+        if data is None:
+            self.logger().error(f"Error received for {url}. Response is {parsed_response}.")
+            raise HuobiAPIError({"error": parsed_response})
+        return data
 
     async def _update_account_id(self) -> str:
         accounts = await self._api_request("get", path_url="/account/accounts", is_auth_required=True)
@@ -413,7 +406,10 @@ cdef class HuobiExchange(ExchangeBase):
         }
         """
         path_url = f"/order/orders/{exchange_order_id}"
-        return await self._api_request("get", path_url=path_url, is_auth_required=True)
+        params = {
+            "order_id": exchange_order_id
+        }
+        return await self._api_request("get", path_url=path_url, params=params, is_auth_required=True)
 
     async def _update_order_status(self):
         cdef:
@@ -430,8 +426,7 @@ cdef class HuobiExchange(ExchangeBase):
                 except HuobiAPIError as e:
                     err_code = e.error_payload.get("error").get("err-code")
                     self.c_stop_tracking_order(tracked_order.client_order_id)
-                    self.logger().info(f"The limit order {tracked_order.client_order_id} "
-                                       f"has failed according to order status API. - {err_code}")
+                    self.logger().info(f"Fail to retrieve order update for {tracked_order.client_order_id} - {err_code}")
                     self.c_trigger_event(
                         self.MARKET_ORDER_FAILURE_EVENT_TAG,
                         MarketOrderFailureEvent(
@@ -811,8 +806,7 @@ cdef class HuobiExchange(ExchangeBase):
                    object price=s_decimal_0,
                    dict kwargs={}):
         cdef:
-            int64_t tracking_nonce = <int64_t> get_tracking_nonce()
-            str order_id = f"buy-{trading_pair}-{tracking_nonce}"
+            str order_id = get_new_client_order_id(TradeType.BUY, trading_pair)
 
         safe_ensure_future(self.execute_buy(order_id, trading_pair, amount, order_type, price))
         return order_id
@@ -882,7 +876,7 @@ cdef class HuobiExchange(ExchangeBase):
                     dict kwargs={}):
         cdef:
             int64_t tracking_nonce = <int64_t> get_tracking_nonce()
-            str order_id = f"sell-{trading_pair}-{tracking_nonce}"
+            str order_id = get_new_client_order_id(TradeType.SELL, trading_pair)
         safe_ensure_future(self.execute_sell(order_id, trading_pair, amount, order_type, price))
         return order_id
 

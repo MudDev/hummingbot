@@ -1,6 +1,5 @@
 import logging
 from decimal import Decimal
-from functools import lru_cache
 import ruamel.yaml
 from os import (
     unlink
@@ -11,7 +10,6 @@ from os.path import (
 )
 from collections import OrderedDict
 import json
-import requests
 from typing import (
     Any,
     Callable,
@@ -32,11 +30,9 @@ from hummingbot.client.settings import (
     CONF_FILE_PATH,
     CONF_POSTFIX,
     CONF_PREFIX,
-    TOKEN_ADDRESSES_FILE_PATH,
     CONNECTOR_SETTINGS
 )
 from hummingbot.client.config.security import Security
-from hummingbot.core.utils.market_price import get_last_price
 from hummingbot import get_strategy_list
 from eth_account import Account
 
@@ -103,7 +99,7 @@ def parse_cvar_value(cvar: ConfigVar, value: Any) -> Any:
 def cvar_json_migration(cvar: ConfigVar, cvar_value: Any) -> Any:
     """
     A special function to migrate json config variable when its json type changes, for paper_trade_account_balance
-    and min_quote_order_amount, they were List but change to Dict.
+    and min_quote_order_amount (deprecated), they were List but change to Dict.
     """
     if cvar.key in ("paper_trade_account_balance", "min_quote_order_amount") and isinstance(cvar_value, List):
         results = {}
@@ -163,34 +159,6 @@ def get_eth_wallet_private_key() -> Optional[str]:
     private_key = Security._private_keys[ethereum_wallet]
     account = Account.privateKeyToAccount(private_key)
     return account.privateKey.hex()
-
-
-@lru_cache(None)
-def get_erc20_token_addresses() -> Dict[str, List]:
-    token_list_url = global_config_map.get("ethereum_token_list_url").value
-    address_file_path = TOKEN_ADDRESSES_FILE_PATH
-    token_list = {}
-
-    resp = requests.get(token_list_url, timeout=1)
-    decoded_resp = resp.json()
-
-    for token in decoded_resp["tokens"]:
-        token_list[token["symbol"]] = [token["address"], token["decimals"]]
-
-    try:
-        with open(address_file_path) as f:
-            overrides: Dict[str, str] = json.load(f)
-            for token, address in overrides.items():
-                override_token = token_list.get(token, [address, 18])
-                token_list[token] = [address, override_token[1]]
-    except FileNotFoundError:
-        # create override file for first run w docker
-        with open(address_file_path, "w+") as f:
-            f.write(json.dumps({}))
-    except Exception as e:
-        logging.getLogger().error(e, exc_info=True)
-
-    return token_list
 
 
 def _merge_dicts(*args: Dict[str, ConfigVar]) -> OrderedDict:
@@ -395,25 +363,6 @@ async def create_yml_files():
                         pass
                 if conf_version < template_version:
                     shutil.copy(template_path, conf_path)
-
-
-def default_min_quote(quote_asset: str) -> (str, Decimal):
-    result_quote, result_amount = "USD", Decimal("11")
-    min_quote_config = global_config_map["min_quote_order_amount"].value
-    if min_quote_config is not None and quote_asset in min_quote_config:
-        result_quote, result_amount = quote_asset, Decimal(str(min_quote_config[quote_asset]))
-    return result_quote, result_amount
-
-
-async def minimum_order_amount(exchange: str, trading_pair: str) -> Decimal:
-    base_asset, quote_asset = trading_pair.split("-")
-    default_quote_asset, default_amount = default_min_quote(quote_asset)
-    quote_amount = Decimal("0")
-    if default_quote_asset == quote_asset:
-        mid_price = await get_last_price(exchange, trading_pair)
-        if mid_price is not None:
-            quote_amount = default_amount / mid_price
-    return round(quote_amount, 4)
 
 
 def default_strategy_file_path(strategy: str) -> str:

@@ -50,6 +50,10 @@ class RequestId:
 
 def split_trading_pair(trading_pair: str) -> Optional[Tuple[str, str]]:
     try:
+        if trading_pair == 'USDTUSD':
+            return 'USD', 'TUSD'
+        elif trading_pair == 'USDTGUSD':
+            return 'USD', 'GUSD'
         m = TRADING_PAIR_SPLITTER.match(trading_pair)
         return m.group(1), m.group(2)
     # Exceptions are now logged as warnings in trading pair fetcher
@@ -57,18 +61,27 @@ def split_trading_pair(trading_pair: str) -> Optional[Tuple[str, str]]:
         return None
 
 
-def translate_tokens(hb_trading_pair: str) -> str:
-    token_replacements = [
+def translate_asset(asset_name: str) -> str:
+    asset_replacements = [
         ("USD", "USDT"),
     ]
-    tokens = hb_trading_pair.split('-')
-    for token_replacement in token_replacements:
-        for x in range(len(tokens)):
-            for inv in [0, 1]:
-                if tokens[x] == token_replacement[inv]:
-                    tokens[x] = token_replacement[(0 if inv else 1)]
-                    break
-    return '-'.join(tokens)
+    for asset_replacement in asset_replacements:
+        for inv in [0, 1]:
+            if asset_name == asset_replacement[inv]:
+                return asset_replacement[(0 if inv else 1)]
+    return asset_name
+
+
+def translate_assets(hb_trading_pair: str) -> str:
+    skip_pairs = [
+        'USDT-GUSD'
+    ]
+    if hb_trading_pair in skip_pairs:
+        return hb_trading_pair
+    assets = hb_trading_pair.split('-')
+    for x in range(len(assets)):
+        assets[x] = translate_asset(assets[x])
+    return '-'.join(assets)
 
 
 def convert_from_exchange_trading_pair(ex_trading_pair: str) -> Optional[str]:
@@ -77,12 +90,12 @@ def convert_from_exchange_trading_pair(ex_trading_pair: str) -> Optional[str]:
         return None
     # HitBTC uses uppercase (BTCUSDT)
     base_asset, quote_asset = split_trading_pair(ex_trading_pair)
-    return translate_tokens(f"{base_asset.upper()}-{quote_asset.upper()}")
+    return translate_assets(f"{base_asset.upper()}-{quote_asset.upper()}")
 
 
 def convert_to_exchange_trading_pair(hb_trading_pair: str) -> str:
     # HitBTC uses uppercase (BTCUSDT)
-    return translate_tokens(hb_trading_pair).replace("-", "").upper()
+    return translate_assets(hb_trading_pair).replace("-", "").upper()
 
 
 def get_new_client_order_id(is_buy: bool, trading_pair: str) -> str:

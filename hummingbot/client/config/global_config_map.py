@@ -1,4 +1,5 @@
 import random
+import re
 from typing import Callable, Optional
 from decimal import Decimal
 import os.path
@@ -7,7 +8,6 @@ import hummingbot.client.settings as settings
 from hummingbot.client.config.config_methods import paper_trade_disabled, using_exchange as using_exchange_pointer
 from hummingbot.client.config.config_validators import (
     validate_bool,
-    validate_int,
     validate_decimal
 )
 from hummingbot.core.rate_oracle.rate_oracle import RateOracleSource, RateOracle
@@ -20,15 +20,6 @@ def generate_client_id() -> str:
 
 def using_exchange(exchange: str) -> Callable:
     return using_exchange_pointer(exchange)
-
-
-# Required conditions
-def using_bamboo_coordinator_mode() -> bool:
-    return global_config_map.get("bamboo_relay_use_coordinator").value
-
-
-def using_wallet() -> bool:
-    return paper_trade_disabled() and settings.ethereum_wallet_required()
 
 
 def validate_script_file_path(file_path: str) -> Optional[bool]:
@@ -53,6 +44,11 @@ def validate_rate_oracle_source(value: str) -> Optional[str]:
 
 def rate_oracle_source_on_validated(value: str):
     RateOracle.source = RateOracleSource[value]
+
+
+def validate_color(value: str) -> Optional[str]:
+    if not re.search(r'^#(?:[0-9a-fA-F]{2}){3}$', value):
+        return "Invalid color code"
 
 
 def global_token_on_validated(value: str):
@@ -95,8 +91,6 @@ main_config_map = {
                   prompt=None,
                   required_if=lambda: False,
                   default=["hummingbot.strategy",
-                           "hummingbot.market",
-                           "hummingbot.wallet",
                            "conf"
                            ],
                   type_str="list"),
@@ -140,13 +134,6 @@ main_config_map = {
                   required_if=lambda: global_config_map["celo_address"].value is not None,
                   is_secure=True,
                   is_connect_key=True),
-    "balancer_max_swaps":
-        ConfigVar(key="balancer_max_swaps",
-                  prompt="Enter the maximum swap pool in Balancer >>> ",
-                  required_if=lambda: False,
-                  type_str="int",
-                  validator=lambda v: validate_int(v, min_value=1, inclusive=True),
-                  default=4),
     "ethereum_wallet":
         ConfigVar(key="ethereum_wallet",
                   prompt="Enter your wallet private key >>> ",
@@ -174,13 +161,6 @@ main_config_map = {
                   type_str="str",
                   required_if=lambda: global_config_map["ethereum_wallet"].value is not None,
                   default="https://defi.cmc.eth.link/"),
-    # Whether or not to invoke cancel_all on exit if marketing making on a open order book DEX (e.g. Radar Relay)
-    "on_chain_cancel_on_exit":
-        ConfigVar(key="on_chain_cancel_on_exit",
-                  prompt="Would you like to cancel transactions on chain if using an open order books exchanges? >>> ",
-                  required_if=lambda: False,
-                  type_str="bool",
-                  default=False),
     "kill_switch_enabled":
         ConfigVar(key="kill_switch_enabled",
                   prompt="Would you like to enable the kill switch? (Yes/No) >>> ",
@@ -223,12 +203,6 @@ main_config_map = {
                   prompt="Would you like to send error logs to hummingbot? (Yes/No) >>> ",
                   type_str="bool",
                   default=True),
-    "min_quote_order_amount":
-        ConfigVar(key="min_quote_order_amount",
-                  prompt=None,
-                  required_if=lambda: False,
-                  type_str="json",
-                  ),
     # Database options
     "db_engine":
         ConfigVar(key="db_engine",
@@ -266,12 +240,6 @@ main_config_map = {
                   type_str="str",
                   required_if=lambda: global_config_map.get("db_engine").value != "sqlite",
                   default="dbname"),
-    "0x_active_cancels":
-        ConfigVar(key="0x_active_cancels",
-                  prompt="Enable active order cancellations for 0x exchanges (warning: this costs gas)?  >>> ",
-                  type_str="bool",
-                  default=False,
-                  validator=validate_bool),
     "script_enabled":
         ConfigVar(key="script_enabled",
                   prompt="Would you like to enable script feature? (Yes/No) >>> ",
@@ -298,32 +266,6 @@ main_config_map = {
                   type_str="decimal",
                   validator=lambda v: validate_decimal(v, Decimal(0), inclusive=False),
                   default=50),
-    "ethgasstation_gas_enabled":
-        ConfigVar(key="ethgasstation_gas_enabled",
-                  prompt="Do you want to enable Ethereum gas station price lookup? >>> ",
-                  required_if=lambda: False,
-                  type_str="bool",
-                  validator=validate_bool,
-                  default=False),
-    "ethgasstation_api_key":
-        ConfigVar(key="ethgasstation_api_key",
-                  prompt="Enter API key for defipulse.com gas station API >>> ",
-                  required_if=lambda: global_config_map["ethgasstation_gas_enabled"].value,
-                  type_str="str"),
-    "ethgasstation_gas_level":
-        ConfigVar(key="ethgasstation_gas_level",
-                  prompt="Enter gas level you want to use for Ethereum transactions (fast, fastest, safeLow, average) "
-                         ">>> ",
-                  required_if=lambda: global_config_map["ethgasstation_gas_enabled"].value,
-                  type_str="str",
-                  validator=lambda s: None if s in {"fast", "fastest", "safeLow", "average"}
-                  else "Invalid gas level."),
-    "ethgasstation_refresh_time":
-        ConfigVar(key="ethgasstation_refresh_time",
-                  prompt="Enter refresh time for Ethereum gas price lookup (in seconds) >>> ",
-                  required_if=lambda: global_config_map["ethgasstation_gas_enabled"].value,
-                  type_str="int",
-                  default=120),
     "gateway_api_host":
         ConfigVar(key="gateway_api_host",
                   prompt=None,
@@ -358,6 +300,11 @@ main_config_map = {
                   required_if=lambda: False,
                   default="HARD-USDT,HARD-BTC,XEM-ETH,XEM-BTC,ALGO-USDT,ALGO-BTC,COTI-BNB,COTI-USDT,COTI-BTC,MFT-BNB,"
                           "MFT-ETH,MFT-USDT,RLC-ETH,RLC-BTC,RLC-USDT"),
+    "command_shortcuts":
+        ConfigVar(key="command_shortcuts",
+                  prompt=None,
+                  required_if=lambda: False,
+                  type_str="list"),
     "rate_oracle_source":
         ConfigVar(key="rate_oracle_source",
                   prompt=f"What source do you want rate oracle to pull data from? "
@@ -369,11 +316,11 @@ main_config_map = {
                   default=RateOracleSource.binance.name),
     "global_token":
         ConfigVar(key="global_token",
-                  prompt="What is your default display token? (e.g. USDT,USD,EUR)  >>> ",
+                  prompt="What is your default display token? (e.g. USD,EUR,BTC)  >>> ",
                   type_str="str",
                   required_if=lambda: False,
                   on_validated=global_token_on_validated,
-                  default="USDT"),
+                  default="USD"),
     "global_token_symbol":
         ConfigVar(key="global_token_symbol",
                   prompt="What is your default display token symbol? (e.g. $,€)  >>> ",
@@ -381,6 +328,76 @@ main_config_map = {
                   required_if=lambda: False,
                   on_validated=global_token_symbol_on_validated,
                   default="$"),
+    "rate_limits_share_pct":
+        ConfigVar(key="rate_limits_share_pct",
+                  prompt="What percentage of API rate limits do you want to allocate to this bot instance? "
+                         "(Enter 50 to indicate 50%)  >>> ",
+                  type_str="decimal",
+                  validator=lambda v: validate_decimal(v, 1, 100, inclusive=True),
+                  required_if=lambda: False,
+                  default=Decimal("100")),
+    "create_command_timeout":
+        ConfigVar(key="create_command_timeout",
+                  prompt="Network timeout when fetching the minimum order amount"
+                         " in the create command (in seconds)  >>> ",
+                  type_str="decimal",
+                  validator=lambda v: validate_decimal(v, min_value=Decimal("0"), inclusive=False),
+                  required_if=lambda: False,
+                  default=Decimal("10")),
+    "other_commands_timeout":
+        ConfigVar(key="other_commands_timeout",
+                  prompt="Network timeout to apply to the other commands' API calls"
+                         " (i.e. import, connect, balance, history; in seconds)  >>> ",
+                  type_str="decimal",
+                  validator=lambda v: validate_decimal(v, min_value=Decimal("0"), inclusive=False),
+                  required_if=lambda: False,
+                  default=Decimal("30")),
 }
 
-global_config_map = {**key_config_map, **main_config_map}
+color_config_map = {
+    # The variables below are usually not prompted during setup process
+    "top-pane":
+        ConfigVar(key="top-pane",
+                  prompt="What is the background color of the top pane? ",
+                  type_str="str",
+                  required_if=lambda: False,
+                  validator=validate_color,
+                  default="#000000"),
+    "bottom-pane":
+        ConfigVar(key="bottom-pane",
+                  prompt="What is the background color of the bottom pane? ",
+                  type_str="str",
+                  required_if=lambda: False,
+                  validator=validate_color,
+                  default="#000000"),
+    "output-pane":
+        ConfigVar(key="output-pane",
+                  prompt="What is the background color of the output pane? ",
+                  type_str="str",
+                  required_if=lambda: False,
+                  validator=validate_color,
+                  default="#282C2F"),
+    "input-pane":
+        ConfigVar(key="input-pane",
+                  prompt="What is the background color of the input pane? ",
+                  type_str="str",
+                  required_if=lambda: False,
+                  validator=validate_color,
+                  default="#151819"),
+    "logs-pane":
+        ConfigVar(key="logs-pane",
+                  prompt="What is the background color of the logs pane? ",
+                  type_str="str",
+                  required_if=lambda: False,
+                  validator=validate_color,
+                  default="#151819"),
+    "terminal-primary":
+        ConfigVar(key="terminal-primary",
+                  prompt="What is the terminal primary color? ",
+                  type_str="str",
+                  required_if=lambda: False,
+                  validator=validate_color,
+                  default="#00FFE5"),
+}
+
+global_config_map = {**key_config_map, **main_config_map, **color_config_map}
